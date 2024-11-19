@@ -40,9 +40,26 @@ async function run() {
         }
     }
 
-    console.log(results);
-    convertResultsToCSV(results);
+    for (let result of results) {
+        if (result.href) {
+            await page.goto(result.href, { waitUntil: 'domcontentloaded' });
+            await page.waitForTimeout(100);
+
+            // Scrape the phone number
+            const phone = await page.evaluate(() => {
+                var phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
+                var phoneMatch = document.body.textContent.match(phoneRegex);
+                return phoneMatch ? phoneMatch[0] : '';
+            });
+
+            // Update the phone number in the results array
+            result.phone = phone;
+        }
+    }
+
+    // console.log(results);
     await browser.close();
+    convertResultsToCSV(results);
 }
 
 run();
@@ -55,8 +72,6 @@ async function scrapeData(page) {
             var rating = '';
             var reviewCount = '';
             var phone = '';
-            var industry = '';
-            var address = '';
             var companyUrl = '';
 
             // Rating and Reviews
@@ -69,7 +84,9 @@ async function scrapeData(page) {
                     if (ariaLabel && ariaLabel.includes("stars")) {
                         var parts = ariaLabel.split(' ');
                         rating = parts[0];
-                        reviewCount = '(' + parts[2] + ')'; 
+                        reviewCount = '(' + parts[2] + ')';
+                        reviewCount = reviewCount.replace(/[()]/g, '');
+
                     } else {
                         rating = '0';
                         reviewCount = '0';
@@ -78,29 +95,29 @@ async function scrapeData(page) {
             }
 
             // Address and Industry
-            if (container) {
-                var containerText = container.textContent || '';
-                var addressRegex = /\d+ [\w\s]+(?:#\s*\d+|Suite\s*\d+|Apt\s*\d+)?/;
-                var addressMatch = containerText.match(addressRegex);
+            // if (container) {
+            //     var containerText = container.textContent || '';
+            //     var addressRegex = /\d+ [\w\s]+(?:#\s*\d+|Suite\s*\d+|Apt\s*\d+)?/;
+            //     var addressMatch = containerText.match(addressRegex);
 
-                if (addressMatch) {
-                    address = addressMatch[0];
+            //     if (addressMatch) {
+            //         address = addressMatch[0];
 
-                    var textBeforeAddress = containerText.substring(0, containerText.indexOf(address)).trim();
-                    var ratingIndex = textBeforeAddress.lastIndexOf(rating + reviewCount);
-                    if (ratingIndex !== -1) {
-                        var rawIndustryText = textBeforeAddress.substring(ratingIndex + (rating + reviewCount).length).trim().split(/[\r\n]+/)[0];
-                        industry = rawIndustryText.replace(/[·.,#!?]/g, '').trim();
-                    }
-                    var filterRegex = /\b(Closed|Open 24 hours|24 hours)|Open\b/g;
-                    address = address.replace(filterRegex, '').trim();
-                    address = address.replace(/(\d+)(Open)/g, '$1').trim();
-                    address = address.replace(/(\w)(Open)/g, '$1').trim();
-                    address = address.replace(/(\w)(Closed)/g, '$1').trim();
-                } else {
-                    address = '';
-                }
-            }
+            //         var textBeforeAddress = containerText.substring(0, containerText.indexOf(address)).trim();
+            //         var ratingIndex = textBeforeAddress.lastIndexOf(rating + reviewCount);
+            //         if (ratingIndex !== -1) {
+            //             var rawIndustryText = textBeforeAddress.substring(ratingIndex + (rating + reviewCount).length).trim().split(/[\r\n]+/)[0];
+            //             industry = rawIndustryText.replace(/[·.,#!?]/g, '').trim();
+            //         }
+            //         var filterRegex = /\b(Closed|Open 24 hours|24 hours)|Open\b/g;
+            //         address = address.replace(filterRegex, '').trim();
+            //         address = address.replace(/(\d+)(Open)/g, '$1').trim();
+            //         address = address.replace(/(\w)(Open)/g, '$1').trim();
+            //         address = address.replace(/(\w)(Closed)/g, '$1').trim();
+            //     } else {
+            //         address = '';
+            //     }
+            // }
 
             // Company URL
             if (container) {
@@ -112,12 +129,13 @@ async function scrapeData(page) {
             }
 
             // Phone Numbers
-            if (container) {
-                var containerText = container.textContent || '';
-                var phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
-                var phoneMatch = containerText.match(phoneRegex);
-                phone = phoneMatch ? phoneMatch[0] : '';
-            }
+            // if (container) {
+            //     var containerText = container.textContent || '';
+            //     console.log(containerText);
+            //     var phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
+            //     var phoneMatch = containerText.match(phoneRegex);
+            //     phone = phoneMatch ? phoneMatch[0] : '';
+            // }
 
             // Skip establishments with a company URL
             if (companyUrl) {
@@ -130,9 +148,6 @@ async function scrapeData(page) {
                 rating: rating,
                 reviewCount: reviewCount,
                 phone: phone,
-                industry: industry,
-                address: address,
-                companyUrl: companyUrl,
                 href: link.href,
             };
         }).filter(item => item !== null); // Remove null results
@@ -140,7 +155,7 @@ async function scrapeData(page) {
 }
 
 function convertResultsToCSV(results) {
-    const fields = ['title', 'rating', 'reviewCount', 'phone', 'industry', 'address', 'companyUrl', 'href'];
+    const fields = ['title', 'rating', 'reviewCount', 'phone', 'href'];
     const opts = { fields };
 
     try {
