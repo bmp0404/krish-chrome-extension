@@ -1,0 +1,17 @@
+{
+  "name": "krish-chrome-extension",
+  "version": "1.0.0",
+  "main": "bot.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@playwright/test": "^1.48.2",
+    "@types/node": "^22.9.0"
+  },
+  "dependencies": {
+    "json2csv": "^6.0.0-alpha.2"
+  }
+}

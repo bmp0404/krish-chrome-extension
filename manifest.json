@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+    "name": "Google Maps Lead Finder",
+    "version": "3.0",
+    "description": "Google Maps Lead Finder",
+    "permissions": ["activeTab", "scripting"],
+    "action": {
+      "default_popup": "popup.html"
+    },
+    "icons": {
+      "16": "earth.png",
+      "48": "earth.png",
+      "128": "earth.png"
+    }
+  }
+  
