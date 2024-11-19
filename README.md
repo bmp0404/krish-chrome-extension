@@ -1,5 +1,5 @@
-Clone repository
-Open folder into VS Code
-Type "npm i" into terminal followed by "npx install playwright"
-Afterwards, change the location and keyword to what you want (top of script)
-To run, type in "node bot.js"
+1. Clone repository 
+2. Open folder into VS Code
+3. Type "npm i" into terminal followed by "npx install playwright"
+4. Afterwards, change the location and keyword to what you want (top of script)
+5. To run, type in "node bot.js"
