@@ -17,15 +17,11 @@ async function run() {
 
             // Press the down arrow key until a span with "You've reached the end of the list." is found
             const scrollWithArrowKey = async () => {
-                // Click on h1 with text 'Results'  to focus on the search input
                 await page.click('h1:text("Results")');
                 while (true) {
-                    await page.keyboard.press('ArrowDown'); // Press the down arrow key
-                    // await page.waitForTimeout(300); // Small delay between key presses
-
-                    // Check if "You've reached the end of the list." span is visible
+                    await page.keyboard.press('ArrowDown');
                     const isEndOfList = await page.$('span:text("You\'ve reached the end of the list.")');
-                    if (isEndOfList) break; // Stop scrolling if end of list is reached
+                    if (isEndOfList) break;
                 }
             };
 
@@ -40,15 +36,33 @@ async function run() {
         }
     }
 
-    for (let result of results) {
+    // Iterate over results and scrape for phone numbers, removing items with websites
+    for (let i = results.length - 1; i >= 0; i--) {
+        const result = results[i];
         if (result.href) {
             await page.goto(result.href, { waitUntil: 'domcontentloaded' });
-            await page.waitForTimeout(100);
+            await page.waitForTimeout(500); // Slight delay for dynamic content to load
+
+            // Check for an external website that is not a Google Maps link
+            const externalWebsite = await page.evaluate(() => {
+                const links = Array.from(document.querySelectorAll('a[href^="http"]'));
+                return links.find(link => {
+                    const url = link.href.toLowerCase();
+                    // Exclude Google Maps or Google-related links
+                    return !url.includes('google.com') && !url.includes('googleusercontent.com');
+                })?.href || null;
+            });
+
+            if (externalWebsite) {
+                console.log(`Website found for: ${result.title} (${externalWebsite}). Removing from results.`);
+                results.splice(i, 1); // Remove the item from the list
+                continue;
+            }
 
             // Scrape the phone number
             const phone = await page.evaluate(() => {
-                var phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
-                var phoneMatch = document.body.textContent.match(phoneRegex);
+                const phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
+                const phoneMatch = document.body.textContent.match(phoneRegex);
                 return phoneMatch ? phoneMatch[0] : '';
             });
 
@@ -57,36 +71,33 @@ async function run() {
         }
     }
 
-    // console.log(results);
     await browser.close();
     convertResultsToCSV(results);
 }
 
 run();
+
 async function scrapeData(page) {
     return await page.evaluate(() => {
-        var links = Array.from(document.querySelectorAll('a[href^="https://www.google.com/maps/place"]'));
+        const links = Array.from(document.querySelectorAll('a[href^="https://www.google.com/maps/place"]'));
         return links.map(link => {
-            var container = link.closest('[jsaction*="mouseover:pane"]');
-            var titleText = container ? container.querySelector('.fontHeadlineSmall').textContent : '';
-            var rating = '';
-            var reviewCount = '';
-            var phone = '';
-            var companyUrl = '';
+            const container = link.closest('[jsaction*="mouseover:pane"]');
+            const titleText = container ? container.querySelector('.fontHeadlineSmall').textContent : '';
+            let rating = '';
+            let reviewCount = '';
+            let phone = '';
+            let companyUrl = '';
 
             // Rating and Reviews
             if (container) {
-                var roleImgContainer = container.querySelector('[role="img"]');
-                
+                const roleImgContainer = container.querySelector('[role="img"]');
                 if (roleImgContainer) {
-                    var ariaLabel = roleImgContainer.getAttribute('aria-label');
-                
+                    const ariaLabel = roleImgContainer.getAttribute('aria-label');
                     if (ariaLabel && ariaLabel.includes("stars")) {
-                        var parts = ariaLabel.split(' ');
+                        const parts = ariaLabel.split(' ');
                         rating = parts[0];
                         reviewCount = '(' + parts[2] + ')';
                         reviewCount = reviewCount.replace(/[()]/g, '');
-
                     } else {
                         rating = '0';
                         reviewCount = '0';
@@ -94,48 +105,14 @@ async function scrapeData(page) {
                 }
             }
 
-            // Address and Industry
-            // if (container) {
-            //     var containerText = container.textContent || '';
-            //     var addressRegex = /\d+ [\w\s]+(?:#\s*\d+|Suite\s*\d+|Apt\s*\d+)?/;
-            //     var addressMatch = containerText.match(addressRegex);
-
-            //     if (addressMatch) {
-            //         address = addressMatch[0];
-
-            //         var textBeforeAddress = containerText.substring(0, containerText.indexOf(address)).trim();
-            //         var ratingIndex = textBeforeAddress.lastIndexOf(rating + reviewCount);
-            //         if (ratingIndex !== -1) {
-            //             var rawIndustryText = textBeforeAddress.substring(ratingIndex + (rating + reviewCount).length).trim().split(/[\r\n]+/)[0];
-            //             industry = rawIndustryText.replace(/[·.,#!?]/g, '').trim();
-            //         }
-            //         var filterRegex = /\b(Closed|Open 24 hours|24 hours)|Open\b/g;
-            //         address = address.replace(filterRegex, '').trim();
-            //         address = address.replace(/(\d+)(Open)/g, '$1').trim();
-            //         address = address.replace(/(\w)(Open)/g, '$1').trim();
-            //         address = address.replace(/(\w)(Closed)/g, '$1').trim();
-            //     } else {
-            //         address = '';
-            //     }
-            // }
-
             // Company URL
             if (container) {
-                var allLinks = Array.from(container.querySelectorAll('a[href]'));
-                var filteredLinks = allLinks.filter(a => !a.href.startsWith("https://www.google.com/maps/place/"));
+                const allLinks = Array.from(container.querySelectorAll('a[href]'));
+                const filteredLinks = allLinks.filter(a => !a.href.startsWith("https://www.google.com/maps/place/"));
                 if (filteredLinks.length > 0) {
                     companyUrl = filteredLinks[0].href;
                 }
             }
-
-            // Phone Numbers
-            // if (container) {
-            //     var containerText = container.textContent || '';
-            //     console.log(containerText);
-            //     var phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
-            //     var phoneMatch = containerText.match(phoneRegex);
-            //     phone = phoneMatch ? phoneMatch[0] : '';
-            // }
 
             // Skip establishments with a company URL
             if (companyUrl) {
@@ -150,7 +127,7 @@ async function scrapeData(page) {
                 phone: phone,
                 href: link.href,
             };
-        }).filter(item => item !== null); // Remove null results
+        }).filter(item => item !== null);
     });
 }
 
