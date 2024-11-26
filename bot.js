@@ -3,8 +3,67 @@ const fs = require('fs');
 const { parse } = require('json2csv');
 
 let results = [];
-const keywords = ["Chinese Takeout"]; // Add more keywords if needed
-const locations = ["Houston, TX"]; // Add more locations if needed
+const keywords = [
+    "Places to eat",
+    "Italian restaurants",
+    "Mexican restaurants",
+    "Chinese restaurants",
+    "Japanese sushi bars",
+    "Indian restaurants",
+    "Mediterranean restaurants",
+    "Vegan restaurants",
+    "Vegetarian-friendly places",
+    "Gluten-free restaurants",
+    "Seafood restaurants",
+    "Steakhouses",
+    "Burger joints",
+    "Pizza places",
+    "Wood-fired pizza spots",
+    "Thai restaurants",
+    "BBQ spots",
+    "Korean BBQ",
+    "Fine dining",
+    "Casual dining",
+    "Farm-to-table restaurants",
+    "Brunch spots",
+    "Breakfast cafes",
+    "Fast food",
+    "Drive-thru spots",
+    "Healthy restaurants",
+    "Low-carb options",
+    "Dessert cafes",
+    "Ice cream parlors",
+    "Bakery cafes",
+    "Coffee shops",
+    "Boba tea shops",
+    "Specialty coffee",
+    "Espresso bars",
+    "Latte art cafes",
+    "Cold brew spots",
+    "Bubble tea cafes",
+    "Matcha tea bars",
+    "Milk tea places",
+    "Craft coffee roasters",
+    "Nitro coffee spots",
+    "Tea lounges",
+    "Herbal tea spots",
+    "High tea venues",
+    "Coffee and dessert spots",
+    "Juice bars",
+    "Smoothie cafes",
+    "Acai bowl spots",
+    "Poke bowl restaurants",
+    "Taco stands",
+    "Food trucks",
+    "Pop-up restaurants",
+    "Fusion cuisine spots",
+    "Outdoor dining options",
+    "Romantic restaurants",
+    "Rooftop dining",
+    "Family-friendly restaurants",
+    "Kid-friendly cafes"
+]; // Add more keywords if needed
+const locations = ["Cypress, TX"]; // Add more locations if needed
 
 async function run() {
     const browser = await chromium.launch({ headless: false, slowMo: 50 });
@@ -18,17 +77,26 @@ async function run() {
             // Press the down arrow key until a span with "You've reached the end of the list." is found
             const scrollWithArrowKey = async () => {
                 await page.click('h1:text("Results")');
+                // if scrollWithArrowKey runs for more than 2 minutes, stop it, scrape the data and continue
+
+                const startTime = Date.now();
                 while (true) {
                     await page.keyboard.press('ArrowDown');
                     const isEndOfList = await page.$('span:text("You\'ve reached the end of the list.")');
                     if (isEndOfList) break;
+                    if (Date.now() - startTime > 150000) break; // 2 minutes
                 }
             };
 
-            await scrollWithArrowKey();
-
+            try {
+                await scrollWithArrowKey();
+            }
+            catch (err) {
+                continue;
+            }
+        
             // Scrape the data
-            const data = await scrapeData(page);
+            const data = await scrapeData(page, location);
             results = results.concat(data);
 
             // wait for user input
@@ -59,6 +127,22 @@ async function run() {
                 continue;
             }
 
+            // This place may be closed
+            // Temporarily closed
+            // Permanently closed
+
+            // Check for span with texts, "This place may be closed", "Temporarily closed", "Permanently closed"
+            const isClosed = await page.evaluate(() => {
+                const closedTexts = ["This place may be closed", "Temporarily closed", "Permanently closed"];
+                return closedTexts.some(text => document.body.textContent.includes(text));
+            });
+
+            if (isClosed) {
+                // Remove the item from the list
+                results.splice(i, 1);
+                continue;
+            }
+
             // Scrape the phone number
             const phone = await page.evaluate(() => {
                 const phoneRegex = /(\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
@@ -67,18 +151,25 @@ async function run() {
             });
 
             // Update the phone number in the results array
+            if(phone === '') {
+                // Remove the item from the list if there is no phone number
+                results.splice(i, 1);
+                continue;
+            }
             result.phone = phone;
         }
     }
 
     await browser.close();
+
     convertResultsToCSV(results);
 }
 
 run();
 
-async function scrapeData(page) {
-    return await page.evaluate(() => {
+async function scrapeData(page, city) {
+    city = city.split(',')[0]; // Remove state abbreviation
+    return await page.evaluate((city) => {
         const links = Array.from(document.querySelectorAll('a[href^="https://www.google.com/maps/place"]'));
         return links.map(link => {
             const container = link.closest('[jsaction*="mouseover:pane"]');
@@ -126,13 +217,14 @@ async function scrapeData(page) {
                 reviewCount: reviewCount,
                 phone: phone,
                 href: link.href,
+                location: city
             };
         }).filter(item => item !== null);
-    });
+    }, city);
 }
 
 function convertResultsToCSV(results) {
-    const fields = ['title', 'rating', 'reviewCount', 'phone', 'href'];
+    const fields = ['title', 'rating', 'reviewCount', 'phone', 'href', 'city'];
     const opts = { fields };
 
     try {
